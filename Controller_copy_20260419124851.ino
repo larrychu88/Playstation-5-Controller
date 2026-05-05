@@ -1,9 +1,13 @@
 #include <Bluepad32.h>
+#include <WiFi.h>
+#include <esp_now.h>
+
 
 const int axisX_Dir_Pin  = 12;
 const int axisY_Dir_pin  = 13;
 const int axisRX_Dir_pin = 14;
 const int axisRY_Dir_pin = 15;
+
 
 
 // PWM output pins (use any GPIO that supports PWM, e.g., 22,23,32,33)
@@ -12,10 +16,51 @@ const int pwmY_Pin = 23;
 const int pwmRX_Pin = 32;
 const int pwmRY_Pin = 33;
 
+
 int axisX_Pwm  = 0; //    pinMode(22,output); //ctl->axisX(),   output  (-511 - 512) left X Axis
 int axisY_Pwm  = 0; //    pinMode(23,output); //ctl->axisY(),   output  (-511 - 512) left Y Axis
 int axisRX_Pwm = 0; //    pinMode(32,output); //ctl->axisX(),   output  (-511 - 512) Right X Axis
-int axisRY_Pwm = 0; //    pinMode(33,output); //ctl->axisY(),   output  (-511 - 512) Right Y Axi
+int axisRY_Pwm = 0; //    pinMode(33,output); //ctl->axisY(),   output  (-511 - 512) Right Y Axis
+
+int bt_axisX_Pwm  = 0; //    pinMode(22,output); //ctl->axisX(),   output  (-511 - 512) left X Axis
+int bt_axisY_Pwm  = 0; //    pinMode(23,output); //ctl->axisY(),   output  (-511 - 512) left Y Axis
+int bt_axisRX_Pwm = 0; //    pinMode(32,output); //ctl->axisX(),   output  (-511 - 512) Right X Axis
+int bt_axisRY_Pwm = 0; //    pinMode(33,output); //ctl->axisY(),   output  (-511 - 512) Right Y Axis
+
+
+int axisX_dir_State = 0;  //LOW
+int axisY_dir_State = 0;  //LOW
+int axisRX_dir_State = 0;  //LOW
+int axisRY_dir_State = 0; //LOW
+
+// REPLACE WITH YOUR RECEIVER MAC Address
+uint8_t broadcastAddress[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+
+// Structure example to send data
+// Must match the receiver structure
+typedef struct struct_message {
+  char a[32];
+  int b1;
+  int b2;
+  int b3;
+  int b4;
+  int c1;
+  int c2;
+  int c3;
+  int c4;
+  bool d;
+} struct_message;
+
+//Create a struct_message call myData
+struct_message myData;
+
+esp_now_peer_info_t peerInfo;
+
+//Callback wheh data is sent
+void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status){
+    Serial.print("\r\\nLast Packet Send Status :\t");
+    Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
+    }
 
 ControllerPtr myControllers[BP32_MAX_GAMEPADS];
 
@@ -86,48 +131,61 @@ void dumpGamepad(ControllerPtr ctl) {
    if(ctl->axisX() <0) {
         axisX_Pwm = map(abs(ctl->axisX()),0,511,0,255);
         digitalWrite(axisX_Dir_Pin, LOW);
+        axisX_dir_State = 0; //LOW
        // Serial.println("Low");
    }else{
         axisX_Pwm = map(ctl->axisX(),0,512,0,255);
         digitalWrite(axisX_Dir_Pin, HIGH);
+        axisX_dir_State = 1; //HIGH
        // Serial.println("High");
    }
-   ledcWrite(0, axisX_Pwm);   // out put pwm to pin 
+    bt_axisX_Pwm = axisX_Pwm;
+    ledcWrite(0, axisX_Pwm);   // output pwm to pin  
+
 
     if(ctl->axisY() <0) {
         axisY_Pwm = map(abs(ctl->axisY()),0,511,0,255);
         digitalWrite(axisY_Dir_pin, LOW);
+        axisY_dir_State = 0; //LOW
        // Serial.println(ctl->axisY());
        // Serial.println("Low");
    }else{
         axisY_Pwm = map(ctl->axisY(),0,512,0,255);
         digitalWrite(axisY_Dir_pin, HIGH);
+        axisY_dir_State = 1; //HIGH
         //Serial.println("High");
    }
-   ledcWrite(1, axisY_Pwm);   // out put pwm to pin 
+    bt_axisY_Pwm = axisY_Pwm;
+    ledcWrite(1, axisY_Pwm);   // output pwm to pin 
 
    if(ctl->axisRX() <0) {
         axisRX_Pwm = map(abs(ctl->axisRX()),0,511,0,255);
          digitalWrite(axisRX_Dir_pin, LOW);
+         axisRX_dir_State = 0; //LOW
        // Serial.println("Low");
    }else{
         axisRX_Pwm = map(ctl->axisRX(),0,512,0,255);
          digitalWrite(axisRX_Dir_pin, HIGH);
+         axisRX_dir_State = 1; //HIGH
        // Serial.println("High");
    }
-    ledcWrite(2, axisRX_Pwm);   // out put pwm to pin 
+    bt_axisRX_Pwm = axisRX_Pwm;
+    ledcWrite(2, axisRX_Pwm);   // output pwm to pin 
 
     if(ctl->axisRY() <0) {
         axisRY_Pwm = map(abs(ctl->axisRY()),0,511,0,255);
          digitalWrite(axisRY_Dir_pin, LOW);
+         axisRY_dir_State = 0; //LOW
         //Serial.println(ctl->axisRY());
         //Serial.println("Low");
    }else{
         axisRY_Pwm = map(ctl->axisRY(),0,512,0,255);
          digitalWrite(axisRY_Dir_pin, HIGH);
+         axisRY_dir_State = 1; //HIGH
         //Serial.println("High");
    }
-    ledcWrite(3, axisRY_Pwm);   // out put pwm to pin 
+    bt_axisRY_Pwm = axisRY_Pwm;
+    ledcWrite(3, axisRY_Pwm);   // output pwm to pin 
 
 
     Serial.println(axisX_Pwm);
@@ -318,8 +376,33 @@ void processControllers() {
 // Arduino setup function. Runs in CPU 1
 void setup() {
     
-
+    //Init Serial Monitor
     Serial.begin(115200);
+
+    //Set Device as a Wi-Fi Station
+    WiFi.mode(WIFI_STA);
+
+    //Init ESP_NOW
+    if(esp_now_init() != ESP_OK){
+        Serial.println("Error initializing ESP-NOW");
+        return;
+    }
+
+    //Once ESP-NOPW is Successfully Init, we will register for send CB to 
+    //get the status of Transmitted packet
+    esp_now_register_send_cb(esp_now_send_cb_t(OnDataSent));
+
+    //register peer
+    memcpy(peerInfo.peer_addr, broadcastAddress, 6);
+    peerInfo.channel = 0;
+    peerInfo.encrypt = false ;
+
+    //Add peer
+    if(esp_now_add_peer(&peerInfo) != ESP_OK){
+        Serial.println("Failed to add peer");
+        return;
+    }
+
     Serial.printf("Firmware: %s\n", BP32.firmwareVersion());
     //pinMode(22,OUTPUT); //ctl->axisX(),   output  (-511 - 512) left X Axis
     //pinMode(23,OUTPUT); //ctl->axisY(),   output  (-511 - 512) left Y Axis
@@ -372,6 +455,32 @@ void loop() {
     bool dataUpdated = BP32.update();
     if (dataUpdated)
         processControllers();
+    
+        //Set values to send
+        strcpy(myData.a, "This is a Char321");
+        myData.b1 = bt_axisX_Pwm;
+        myData.b2 = bt_axisY_Pwm;
+        myData.b3 = bt_axisRX_Pwm;
+        myData.b4 = bt_axisRY_Pwm;
+        myData.c1 =  axisX_dir_State;
+        myData.c2 =  axisY_dir_State;
+        myData.c3 =  axisRX_dir_State;
+        myData.c4 =  axisRY_dir_State;
+
+
+        myData.d = false;
+
+        // Send message vis esp-now
+        esp_err_t result= esp_now_send(broadcastAddress, (uint8_t *) &myData, sizeof(myData));
+
+        if(result  ==  ESP_OK){
+            Serial.println("Send with success");
+        }
+        else{
+            Serial.println("Error sending the Data");
+        }
+        delay(2000);
+
 
     // The main loop must have some kind of "yield to lower priority task" event.
     // Otherwise, the watchdog will get triggered.
